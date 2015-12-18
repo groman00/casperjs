@@ -28,12 +28,13 @@
  *
  */
 
-/*eslint max-statements:0, complexity:0*/
+/*global process, console, phantom, slimer, require:true*/
+/*jshint maxstatements:34, maxcomplexity:10*/
 
 // node check
-if ('process' in this && this.process.title === "node") {
+if ('process' in this && process.title === "node") {
     console.error('CasperJS cannot be executed within a nodejs environment');
-    this.process.exit(1);
+    process.exit(1);
 }
 
 // phantom check
@@ -46,26 +47,27 @@ if (typeof Function.prototype.bind !== "function") {
     // https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Function/bind#Compatibility
     Function.prototype.bind = function (oThis) {
         "use strict";
+        /* jshint -W055 */
         if (typeof this !== "function") {
             // closest thing possible to the ECMAScript 5 internal IsCallable function
             throw new TypeError("Function.prototype.bind - what is trying to be bound is not callable");
         }
         var aArgs = Array.prototype.slice.call(arguments, 1),
             fToBind = this,
-            NOP = function() {},
+            fNOP = function() {},
             fBound = function() {
-              return fToBind.apply(this instanceof NOP && oThis ? this : oThis,
+              return fToBind.apply(this instanceof fNOP && oThis ? this : oThis,
                                    aArgs.concat(Array.prototype.slice.call(arguments)));
             };
-        NOP.prototype = this.prototype;
-        fBound.prototype = new NOP();
+        fNOP.prototype = this.prototype;
+        fBound.prototype = new fNOP();
         return fBound;
     };
 }
 
 // Custom base error
 var CasperError = function CasperError(msg) {
-    "use strict";
+    "use strict"
     Error.call(this);
     this.message = msg;
     this.name = 'CasperError';
@@ -73,55 +75,48 @@ var CasperError = function CasperError(msg) {
 CasperError.prototype = Object.getPrototypeOf(new Error());
 
 // casperjs env initialization
-(function(global, phantom, system){
+(function(global, phantom){
+    /*jshint maxstatements:99*/
     "use strict";
     // phantom args
-    var phantomArgs = system.args.slice(1);
-
-    if ("slimer" in global) {
-        phantom.casperEngine = "slimerjs";
-    } else {
-        phantom.casperEngine = "phantomjs";
+    var sysargs = require('system').args;
+    var phantomArgs = [];
+    // don't take the first value; this mimics the contents of the old phantom.args
+    for (var i = 1; i < sysargs.length; i++) {
+        phantomArgs.push(sysargs[i]);
     }
 
     if (phantom.casperLoaded) {
         return;
     }
 
-    function __exit(statusCode){
-        setTimeout(function() { phantom.exit(statusCode); }, 0);
-    }
-
     function __die(message) {
         if (message) {
             console.error(message);
         }
-        __exit(1);
+        phantom.exit(1);
     }
 
     function __terminate(message) {
         if (message) {
             console.log(message);
         }
-        __exit();
+        phantom.exit();
     }
 
     (function (version) {
         // required version check
-        if (phantom.casperEngine === 'phantomjs') {
-            if (version.major === 1) {
-                if (version.minor < 9) {
-                    return __die('CasperJS needs at least PhantomJS v1.9 or later.');
-                }
-                if (version.minor === 9 && version.patch < 1) {
-                    return __die('CasperJS needs at least PhantomJS v1.9.1 or later.');
-                }
-            } else if (version.major === 2) {
-                // No requirements yet known
-            } else {
-                return __die('CasperJS needs PhantomJS v1.9.x or v2.x');
+        if (version.major === 1) {
+            if (version.minor < 8) {
+                return __die('CasperJS needs at least PhantomJS v1.8 or later.');
             }
+            if (version.minor === 8 && version.patch < 1) {
+                return __die('CasperJS needs at least PhantomJS v1.8.1 or later.');
+            }
+        } else if (version.major === 2) {
+            console.log("Warning PhantomJS v2.0 not yet released. There will not be any official support for any bugs until stable version is released!");
         }
+        else return __die('CasperJS needs PhantomJS v1.x or v2.x');
     })(phantom.version);
 
     // Hooks in default phantomjs error handler
@@ -132,7 +127,7 @@ CasperError.prototype = Object.getPrototypeOf(new Error());
             console.error('Hint: you may want to use the `casperjs test` command.');
         }
         // exits on syntax error
-        if (msg.indexOf('SyntaxError: ') === 0) {
+        if (msg.indexOf('SyntaxError: Parse error') === 0) {
             __die();
         }
     };
@@ -186,14 +181,13 @@ CasperError.prototype = Object.getPrototypeOf(new Error());
      * Prints CasperJS help.
      */
     function printHelp() {
-        /* global slimer */
         var engine = phantom.casperEngine === 'slimerjs' ? slimer : phantom;
         var version = [engine.version.major, engine.version.minor, engine.version.patch].join('.');
         return __terminate([
             'CasperJS version ' + phantom.casperVersion.toString() +
             ' at ' + phantom.casperPath + ', using ' + phantom.casperEngine + ' version ' + version,
             fs.read(fs.pathJoin(phantom.casperPath, 'bin', 'usage.txt'))
-        ].join('\n'));
+        ].join('\n'))
     }
 
     /**
@@ -293,7 +287,7 @@ CasperError.prototype = Object.getPrototypeOf(new Error());
      * Initializes the CasperJS Command Line Interface.
      */
     function initCasperCli(casperArgs) {
-        /*eslint complexity:0*/
+        /* jshint maxcomplexity:99 */
         var baseTestsPath = fs.pathJoin(phantom.casperPath, 'tests');
 
         function setScriptBaseDir(scriptName) {
@@ -305,7 +299,7 @@ CasperError.prototype = Object.getPrototypeOf(new Error());
         }
 
         if (!!casperArgs.options.version) {
-            return __terminate(phantom.casperVersion.toString());
+            return __terminate(phantom.casperVersion.toString())
         } else if (casperArgs.get(0) === "test") {
             phantom.casperScript = fs.absolute(fs.pathJoin(baseTestsPath, 'run.js'));
             phantom.casperTest = true;
@@ -372,23 +366,24 @@ CasperError.prototype = Object.getPrototypeOf(new Error());
         };
     })(phantom.casperPath);
 
-    // phantomjs2 has paths in require, but needs patchRequire anyway
-    if (!("paths" in global.require) ||
-        ('phantomjs' === phantom.casperEngine && 1 < phantom.version.major)
-    ) {
+    if ("paths" in global.require) {
+        // declare a dummy patchRequire function
+        global.patchRequire = function(req) {return req;};
+
+        require.paths.push(fs.pathJoin(phantom.casperPath, 'modules'));
+        require.paths.push(fs.workingDirectory);
+    } else {
         global.__require = require;
         global.patchRequire = patchRequire; // must be called in every casperjs module as of 1.1
         global.require = patchRequire(global.require);
-    } else {
-        // declare a dummy patchRequire function
-        global.patchRequire = function(req) {return req;};
-        require.paths.push(fs.pathJoin(phantom.casperPath, 'modules'));
-        require.paths.push(fs.workingDirectory);
     }
 
-    if (phantom.casperEngine === 'slimerjs') {
+    if ("slimer" in global) {
         require.globals.patchRequire = global.patchRequire;
         require.globals.CasperError = CasperError;
+        phantom.casperEngine = "slimerjs";
+    } else {
+        phantom.casperEngine = "phantomjs";
     }
 
     // casper cli args
@@ -414,4 +409,4 @@ CasperError.prototype = Object.getPrototypeOf(new Error());
     if (phantom.casperScript && !phantom.injectJs(phantom.casperScript)) {
         return __die('Unable to load script ' + phantom.casperScript + '; check file syntax');
     }
-})(this, phantom, require('system'));
+})(this, phantom);
